@@ -19,6 +19,7 @@ func New(router *mux.Router, db *repository.PGRepo) *api {
 func (api *api) Handle() {
 	api.r.HandleFunc("/api/lectures", api.lectures)
 	api.r.HandleFunc("/api/lectures/{id}", api.GetLectureById).Methods("GET")
+	api.r.HandleFunc("/api/search", api.SearchLecture).Methods("POST")
 }
 
 func (api *api) ListenAndServe(addr string) error {

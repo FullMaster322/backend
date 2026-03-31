@@ -46,3 +46,26 @@ func (api *api) GetLectureById(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func (api *api) SearchLecture(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	var req struct {
+		Query string `json:"query"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	data, err := api.db.SearchLectures(req.Query)
+	if err != nil || len(data) == 0 {
+		json.NewEncoder(w).Encode(map[string]string{
+			"message": "К сожалению по вашему запросу ничего не найдено",
+		})
+		return
+	}
+
+	json.NewEncoder(w).Encode(data)
+}

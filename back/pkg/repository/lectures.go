@@ -4,6 +4,7 @@ import (
 	"backend/back/pkg/models"
 	"context"
 	"fmt"
+	"strings"
 )
 
 func (repo *PGRepo) LectureExistsByName(name string) (bool, error) {
@@ -93,4 +94,58 @@ func (repo *PGRepo) DeleteLectureById(id int) error {
 	`, id)
 
 	return err
+}
+
+func prepareQuery(q string) string {
+	words := strings.Fields(q)
+	for i, w := range words {
+		words[i] = w + ":*" // частичный поиск
+	}
+	return strings.Join(words, " & ")
+}
+
+func (repo *PGRepo) SearchLectures(query string) ([]map[string]interface{}, error) {
+	rows, err := repo.pool.Query(context.Background(), `
+		SELECT 
+			id,
+			name,
+			ts_rank(
+				to_tsvector('russian', name || ' ' || description),
+				plainto_tsquery('russian', $1)
+			) AS rank,
+			ts_headline(
+				'russian',
+				description,
+				plainto_tsquery('russian', $1),
+				'MaxWords=20, MinWords=10'
+			) AS snippet
+		FROM lectures
+		WHERE
+			name ILIKE '%' || $1 || '%'
+			OR description ILIKE '%' || $1 || '%'
+			OR to_tsvector('russian', name || ' ' || description) @@ plainto_tsquery('russian', $1)
+		ORDER BY rank DESC
+		LIMIT 20
+	`, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		var id int
+		var name, snippet string
+		var rank float32
+		if err := rows.Scan(&id, &name, &rank, &snippet); err != nil {
+			return nil, err
+		}
+		results = append(results, map[string]interface{}{
+			"id":      id,
+			"name":    name,
+			"snippet": snippet,
+			"rank":    rank,
+		})
+	}
+	return results, nil
 }
